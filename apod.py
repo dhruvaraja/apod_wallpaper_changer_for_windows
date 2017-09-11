@@ -92,32 +92,47 @@ def update_last_run_timestamp(settings):
 	f.close()
 	
 def download_apod_image(settings):
+	image_date = datetime.date.today()
+	date_query_str = ""
+
 	if settings.hd_image:
 		apod_url = settings.apod_url_hd
 		url_key = "hdurl"
 	else:
 		apod_url = settings.apod_url
 		url_key = "url"
-	try:
-		with urllib.request.urlopen(apod_url) as url:
-			settings.json_data = json.loads(url.read().decode())
-			if settings.json_data["media_type"] != "image":
-				logging.error("Unsupported media type : %s" % settings.json_data["media_type"])
-				return False
-			file_path = settings.json_data[url_key]		
-		if not file_path.lower().endswith(settings.recognized_formats):
-			logging.error("Unrecognized file type in %s" % settings.json_data["url"])
+
+	apod_url_initial = apod_url
+	while True:
+		if date_query_str:
+			apod_url = apod_url_initial + "&date=" + date_query_str
+			
+		try:
+			with urllib.request.urlopen(apod_url) as url:
+				settings.json_data = json.loads(url.read().decode())
+				if settings.json_data["media_type"] != "image":
+					logging.error("Unsupported media type : %s" % settings.json_data["media_type"])
+					image_date = image_date - datetime.timedelta(days=30)
+					date_query_str = image_date.strftime("%Y-%m-%d")
+					logging.info("Picking image from older date : %s" % date_query_str)
+					continue
+				file_path = settings.json_data[url_key]		
+			if not file_path.lower().endswith(settings.recognized_formats):
+				logging.error("Unrecognized file type in %s" % settings.json_data["url"])
+				image_date = image_date - timedelta(days=30)
+				date_query_str = image_date.strftime("%Y-%m-%d")
+				logging.info("Picking image from older date : %s" % date_query_str)
+				continue
+			urllib.request.urlretrieve(settings.json_data["url"],settings.image_path)
+		except urllib.error.URLError  as e:
+			logging.error('URLError: %s. Exiting' % (str(e)))
 			return False
-		urllib.request.urlretrieve(settings.json_data["url"],settings.image_path)
-	except urllib.error.URLError  as e:
-		logging.error('URLError: %s. Exiting' % (str(e)))
-		return False
-	except urllib.error.HTTPError as e:
-		logging.error('HTTPError: %s. Exiting' % (str(e)))
-		return False
-	else:
-		logging.info('APOD image downloaded. Processing.')
-	
+		except urllib.error.HTTPError as e:
+			logging.error('HTTPError: %s. Exiting' % (str(e)))
+			return False
+		else:
+			logging.info('APOD image downloaded. Processing.')
+			break; # No need to loop anymore
 	return True
 
 def calculate_text_placement(settings, draw):
