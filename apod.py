@@ -187,9 +187,6 @@ def schtask_config(settings, action):
 		completed = subprocess.run(delete_cmd)
 	else:
 		exit()		
-	
-	print('returncode:', completed.returncode)
-
 
 def main():
 	settings = ApodSettings()
@@ -198,11 +195,11 @@ def main():
 	logging.info('Starting script')
 	
 	if len(sys.argv) >= 0:
-		if sys.argv[0] == "install":
+		if sys.argv[1] == "install":
 			logging.info('Installing Windows scheduler task : %s' % settings.windows_task_name)
 			schtask_config(settings, "install")
 			exit()
-		elif sys.argv[0] == "uninstall":
+		elif sys.argv[1] == "uninstall":
 			logging.info('Uninstalling Windows scheduler task : %s' % settings.windows_task_name)
 			schtask_config(settings, "uninstall")
 			exit()
