@@ -144,11 +144,10 @@ def calculate_text_placement(settings, draw):
 	
 def process_apod_image(settings):
 	img = Image.open(settings.image_path)
-	print(img.size)
-	print(settings.maxsize)
-	img.thumbnail(settings.maxsize, Image.ANTIALIAS)
+	ratio = min((settings.maxsize[0]/img.size[0]), (settings.maxsize[1]/img.size[1]))
+	req_size = (int(round(img.size[0] * ratio)), int(round(img.size[1] * ratio)))
+	img = img.resize(req_size, Image.ANTIALIAS)
 	settings.img_size = img.size
-	print(img.size)
 	
 	if settings.explanation_embed == True:
 		draw = ImageDraw.Draw(img)
