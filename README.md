@@ -5,8 +5,8 @@ Instructions for use with Windows 7 or Windows 10:
 
 Pre-requisites:
 ---------------
-1. Install Python 3.x. 
-2. Open command prompt and run the below commands
+1. Install Python 3.x. [https://www.python.org/downloads/]
+2. Open command prompt (Windows Key + R, Open: cmd) and run the below commands
  	 - pip install pypiwin32
  	 - pip install image
 
