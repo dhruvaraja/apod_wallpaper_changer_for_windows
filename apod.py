@@ -177,7 +177,7 @@ def set_apod_wallpaper(settings):
 def schtask_config(settings, action):
 	python_path = sys.executable
 	apod_script_path = os.path.realpath(__file__)
-	create_cmd = ['schtasks', '/Create', '/SC', 'MINUTE', '/MO', '5','/TN', settings.windows_task_name, '/TR',
+	create_cmd = ['schtasks', '/Create', '/SC', 'HOURLY', '/MO', '2','/TN', settings.windows_task_name, '/TR',
 				python_path + " " + apod_script_path, "/F"]
 	delete_cmd = ['schtasks', '/Delete', '/TN', settings.windows_task_name, '/F']
 	
@@ -194,7 +194,7 @@ def main():
 	logging.basicConfig(filename=settings.log_filename,level=logging.DEBUG,format='%(asctime)s %(levelname)s %(message)s')
 	logging.info('Starting script')
 	
-	if len(sys.argv) >= 0:
+	if len(sys.argv) > 1:
 		if sys.argv[1] == "install":
 			logging.info('Installing Windows scheduler task : %s' % settings.windows_task_name)
 			schtask_config(settings, "install")
