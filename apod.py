@@ -189,7 +189,7 @@ def set_apod_wallpaper(settings):
 	return True
 
 def schtask_config(settings, action):
-	python_path = sys.executable
+	python_path = sys.exec_prefix + "\\pythonw.exe"
 	apod_script_path = os.path.realpath(__file__)
 	create_cmd = ['schtasks', '/Create', '/SC', 'HOURLY', '/MO', '2','/TN', settings.windows_task_name, '/TR',
 				python_path + " " + apod_script_path, "/F"]
