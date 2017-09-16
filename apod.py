@@ -29,6 +29,8 @@
 #   $python apod.py install
 # 3.) If you want the script to unregister itself with Windows Task Scheduler
 #   $python apod.py uninstall
+# 4.) If you want to force an image update, run
+#	$python apod.py update
 
 import urllib.request, json
 from win32api import GetSystemMetrics
@@ -37,33 +39,45 @@ from PIL import Image, ImageFont, ImageDraw
 import textwrap, ctypes
 import logging, datetime
 import os, sys, subprocess
+import shutil
 
 class ApodSettings(object):
-	title_start = (0, 0) #Place holder, value will be calculated at runtime
-	title_size = 20
-	title_font = ImageFont.truetype("arial.ttf", title_size)
-	explanation_start = (0, 0) #Place holder, value will be calculated at runtime
-	explanation_size = 12
-	explanation_font = ImageFont.truetype("arial.ttf", explanation_size)
-	explanation_embed = True
-	text_width = 100
-	text_border_offset = 25
-	hd_image = True
+	# APOD Image Configurations
 	apod_url = "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY"
 	apod_url_hd = "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&hd=True"
-	json_data = None
+	hd_image = True
 	image_path = os.path.dirname(os.path.realpath(__file__)) + "\\apod_wallpaper.jpg"
 	processed_image_path = os.path.dirname(os.path.realpath(__file__)) + "\\apod_wallpaper1.jpg"
-	log_filename = os.path.dirname(os.path.realpath(__file__)) + "\\apod_downloader.log"
-	log_last_success = os.path.dirname(os.path.realpath(__file__)) + "\\last_success.log"
+	json_data = None
 	screen_width = GetSystemMetrics(0)
 	screen_height = GetSystemMetrics(1)
 	img_size = None
 	maxsize = (screen_width, screen_height)
 	recognized_formats = ("jpg", "jpeg", "bmp", "png")
+	
+	# Display settings related to Title of the APOD image
+	title_start = (0, 0) #Place holder, value will be calculated at runtime
+	title_size = 20
+	title_font = ImageFont.truetype("arial.ttf", title_size)
+	
+	# Display settings related to Explanation of the APOD image
+	explanation_embed = True
+	explanation_start = (0, 0) #Place holder, value will be calculated at runtime
+	explanation_size = 12
+	explanation_font = ImageFont.truetype("arial.ttf", explanation_size)
+	
+	# General settings related to display of text
+	text_width = 100
+	text_border_offset = 25
+	
+	# Configuration details related to logging
+	log_filename = os.path.dirname(os.path.realpath(__file__)) + "\\apod_downloader.log"
+	log_last_success = os.path.dirname(os.path.realpath(__file__)) + "\\last_success.log"
+	
+	# Generic settings
 	windows_task_name = "Apod Wallpaper Changer"
 	
-def need_update(settings):
+def hours_since_last_update(settings):
 	try:
 		f = open(settings.log_last_success, 'r')
 	except IOError:
@@ -76,12 +90,12 @@ def need_update(settings):
 	delta = now - last_run
 	delta_in_hours = delta.total_seconds()/(60*60)
 	
-	if delta_in_hours >= 24 or delta_in_hours < 0:
-		return True
-	else:
-		return False
+	if delta_in_hours < 0:
+		delta_in_hours = 24
 	
-def update_last_run_timestamp(settings):
+	return delta_in_hours
+	
+def update_last_success_timestamp(settings):
 	try:
 		f = open(settings.log_last_success, 'w')
 	except IOError:
@@ -164,6 +178,10 @@ def process_apod_image(settings):
 	img = img.resize(req_size, Image.ANTIALIAS)
 	settings.img_size = img.size
 	
+	# Convert to RGB mode
+	if img.mode != "RGB":
+	    img = img.convert("RGB")
+	
 	if settings.explanation_embed == True:
 		draw = ImageDraw.Draw(img)
 		calculate_text_placement(settings, draw)
@@ -179,7 +197,9 @@ def set_apod_wallpaper(settings):
 	key = win32api.RegOpenKeyEx(win32con.HKEY_CURRENT_USER,"Control Panel\\Desktop",0,win32con.KEY_SET_VALUE)
 	win32api.RegSetValueEx(key, "WallpaperStyle", 0, win32con.REG_SZ, "0")
 	win32api.RegSetValueEx(key, "TileWallpaper", 0, win32con.REG_SZ, "0")
-	retval = ctypes.windll.user32.SystemParametersInfoA(win32con.SPI_SETDESKWALLPAPER, len(image_path_cbuff), image_path_cbuff, win32con.SPIF_SENDWININICHANGE | win32con.SPIF_UPDATEINIFILE)
+	retval = ctypes.windll.user32.SystemParametersInfoA(win32con.SPI_SETDESKWALLPAPER,
+			len(image_path_cbuff), image_path_cbuff,
+			win32con.SPIF_SENDWININICHANGE | win32con.SPIF_UPDATEINIFILE)
 	if retval == 0:
 		logging.error("SystemParametersInfoA(SPI_SETDESKWALLPAPER) returned = %d", retval)
 		retval = ctypes.GetLastError()
@@ -188,46 +208,70 @@ def set_apod_wallpaper(settings):
 	logging.info('APOD image processing complete. Set as wallpaper')
 	return True
 
-def schtask_config(settings, action):
+def manage_installation(settings, action):
+	appdata_path = os.getenv('LOCALAPPDATA')
+	folder_name = "ApodDownloader"
+	file_name = __file__
+	dest = appdata_path + "/" + folder_name
+	this_script_path = os.path.realpath(__file__)
 	python_path = sys.exec_prefix + "\\pythonw.exe"
-	apod_script_path = os.path.realpath(__file__)
-	create_cmd = ['schtasks', '/Create', '/SC', 'HOURLY', '/MO', '2','/TN', settings.windows_task_name, '/TR',
-				python_path + " " + apod_script_path, "/F"]
-	delete_cmd = ['schtasks', '/Delete', '/TN', settings.windows_task_name, '/F']
 	
-	if (action == "install"):
-		completed = subprocess.run(create_cmd)
-	elif (action == "uninstall"):
-		completed = subprocess.run(delete_cmd)
+	if action == 'INSTALL':
+		try:
+			os.makedirs(dest, exist_ok=True)
+			shutil.copy(this_script_path, dest)
+			create_cmd = ['schtasks', '/Create', '/SC', 'HOURLY', '/MO', '2','/TN',
+				settings.windows_task_name, '/TR',
+				python_path + " " + dest + "/" + file_name, "/F"]
+			completed = subprocess.run(create_cmd)
+		except OSError as e:
+			logging.error('Installation failed : %s' % (str(e)))
+			return False			
+	elif action == 'UNINSTALL':
+		try:
+			shutil.rmtree(dest, ignore_errors=True)
+		except OSError as err:
+			logging.error('Uninstallation failed : %s' % (str(e)))
+			return False
+		else:
+			delete_cmd = ['schtasks', '/Delete', '/TN',
+				settings.windows_task_name, '/F']
+			completed = subprocess.run(delete_cmd)
 	else:
-		exit()		
+		return False
+
+	return True
 
 def main():
 	settings = ApodSettings()
+	done = False
 	
 	logging.basicConfig(filename=settings.log_filename,level=logging.DEBUG,format='%(asctime)s %(levelname)s %(message)s')
 	logging.info('Starting script')
 	
 	if len(sys.argv) > 1:
 		if sys.argv[1] == "install":
-			logging.info('Installing Windows scheduler task : %s' % settings.windows_task_name)
-			schtask_config(settings, "install")
-			exit()
+			manage_installation(settings, 'INSTALL')
+			done = False		# Also download and set APOD wallpaper
 		elif sys.argv[1] == "uninstall":
 			logging.info('Uninstalling Windows scheduler task : %s' % settings.windows_task_name)
-			schtask_config(settings, "uninstall")
-			exit()
-	
-	if need_update(settings):
+			manage_installation(settings, 'UNINSTALL')
+			done = True
+		elif sys.argv[1] == "update":
+			done = False
+	elif hours_since_last_update(settings) <= 24:
+		logging.info('No update needed')
+		done = True
+		
+	if not done:
 		success = download_apod_image(settings)
 		if success:
-			logging.info('Done  download_apod_image')
+			logging.info('Successfully downloaded image of the day.')
 			process_apod_image(settings)
-			logging.info('Done  process_apod_image')
+			logging.info('Processing image complete.')
 			set_apod_wallpaper(settings)
-			update_last_run_timestamp(settings)
-	else:
-		logging.info('No update needed')
+			update_last_success_timestamp(settings)		
+
 	logging.info('Exiting script')
 	logging.info('=================================')
 	
