@@ -251,6 +251,9 @@ def main():
 	
 	if len(sys.argv) > 1:
 		if sys.argv[1] == "install":
+			logging.info('Trying to remove any previous installations')
+			manage_installation(settings, 'UNINSTALL')
+			logging.info('Proceeding with latest installation')
 			manage_installation(settings, 'INSTALL')
 			done = False		# Also download and set APOD wallpaper
 		elif sys.argv[1] == "uninstall":
