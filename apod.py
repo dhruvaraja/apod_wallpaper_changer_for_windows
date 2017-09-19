@@ -76,12 +76,12 @@ class ApodSettings(object):
 	
 	# Generic settings
 	windows_task_name = "Apod Wallpaper Changer"
-	
+
 def hours_since_last_update(settings):
 	try:
 		f = open(settings.log_last_success, 'r')
 	except IOError:
-		return True
+		return sys.maxsize 	# Return a largest possible integer
 	
 	timestamp = f.read()
 	f.close()
@@ -91,7 +91,7 @@ def hours_since_last_update(settings):
 	delta_in_hours = delta.total_seconds()/(60*60)
 	
 	if delta_in_hours < 0:
-		delta_in_hours = 24
+		sys.maxsize 	# Return a largest possible integer
 	
 	return delta_in_hours
 	
